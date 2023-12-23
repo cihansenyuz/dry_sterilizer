@@ -1,326 +1,163 @@
-/* USER CODE BEGIN Header */
-/**
-  ******************************************************************************
-  * @file           : main.c
-  * @brief          : Main program body
-  ******************************************************************************
-  * @attention
-  *
-  * Copyright (c) 2023 STMicroelectronics.
-  * All rights reserved.
-  *
-  * This software is licensed under terms that can be found in the LICENSE file
-  * in the root directory of this software component.
-  * If no LICENSE file comes with this software, it is provided AS-IS.
-  *
-  ******************************************************************************
-  */
-/* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
-#include "main.h"
+#include "adc_driver.h"
+#include "uart_driver.h"
+#include "help_func.h"
+#include "stdlib.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
+#define OFF_DURITION 1	// mins
+#define ON_DURITION 1	// mins
+#define ROOM_TEMP_REFERANCE 35 //40 23=40derece
+#define HEAT_LED_REFERANCE 450 //250
 
-/* USER CODE END Includes */
+#define NTC_PIN	1
+#define LED_PIN	6
+#define RELAY_SSR_PIN 11
+#define ON_BUTTON_PIN 8
+#define FAN_PIN 4
 
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
+/* UART Configurations 
+	USART2 TX:PA2 RX:PA3
+	USART1 TX:PA9 RX:PA10 */
+#define UART_PORT 2
+#define UART_SPEED 115200
 
-/* USER CODE END PTD */
+void setup(void);
+unsigned short getTemp(void);
+unsigned short heatLedIsOn(void);
+void printValue(unsigned int);
+struct uartManager serialPort;
+//unsigned int heatUpCounter = 0;
+char* valueStr;
 
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-#define OFF_DURITION 5	// mins
-#define ON_DURITION 5	// mins
-#define ROOM_TEMP_REFERANCE 2844 // for 2V5 // ADC 0-3V6 ==> 0-4096
-
-#define NTC_PIN	GPIO_PIN_1
-#define LED_PIN	GPIO_PIN_10
-#define RELAY_SSR_PORT GPIO_PIN_11
-
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
-/* USER CODE BEGIN PV */
-
-/* USER CODE END PV */
-
-/* Private function prototypes -----------------------------------------------*/
-void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_ADC1_Init(void);
-/* USER CODE BEGIN PFP */
-unsigned int getTemp(void);
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
 	unsigned int offDurition = OFF_DURITION;
 	unsigned int onDurition = ON_DURITION;
 	unsigned int i;
 	
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
-
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_ADC1_Init();
-  /* USER CODE BEGIN 2 */
+	setup();
 	
-  /* USER CODE END 2 */
-
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
-  while (1)
-  {
+	uart_send(UART_PORT, "STM32 is ready. Push the button\n");
+	while(read_GP(PA, ON_BUTTON_PIN))		// wait while ON_BUTTON is not pushed
+	{}
+	
+//		while(1)
+//		{
+//			write_GP(PA, RELAY_SSR_PIN, 1);	// turn the heater on
+//			write_GP(PA, RELAY_SSR_PIN, 0);	// turn the heater off
+//		}
+	while(1)
+	{
+		// begining of heat up period //
+		write_GP(PA, RELAY_SSR_PIN, 1);	// turn the heater on
+		uart_send(UART_PORT, "\nHeat up process started\n");
+		write_GP(PC, 13, 0);
 		
-		while(HAL_GPIO_ReadPin(GPIOA, LED_PIN))	// read until heat led turns off
+		while(heatLedIsOn())	// wait while heat led is on
 		{
-			HAL_Delay(100);
-		}// target temp reached //
+			delayMS(10000);
+		}
+		uart_send(UART_PORT, "Heat up process is over\n");
+		// end of heat-up period //
+		// target temp reached //
 		
+		// beginning of on-time durition //
 		for(i=0; i < onDurition; i++)
 		{
-			HAL_Delay(1000);
-		}// done running for on durition //
+//			delayMS(60000);
+		}
+		// end of on-time durition //
+		write_GP(PC, 13, 1);
+		uart_send(UART_PORT, "Cool down process started\n");
 		
-		HAL_GPIO_WritePin(GPIOA, RELAY_SSR_PORT, GPIO_PIN_SET);	// shut heater off
-		//HAL_Delay(600000);	// wait for 10 mins
-		// cool down started //
+		// begining of cool down period //
+		write_GP(PA, RELAY_SSR_PIN, 0);	// turn the heater off
+		write_GP(PA, FAN_PIN, 1);				// turn the fan on
+//		delayMS(600000);	// wait for 10 mins
 		
-		while(getTemp() < ROOM_TEMP_REFERANCE)	// check every 10 mins if room temp is reached
+		
+		while(getTemp() < ROOM_TEMP_REFERANCE)	// check every 5 mins if room temp is reached
 		{
-			HAL_Delay(200);
-				HAL_GPIO_TogglePin(GPIOC, GPIO_PIN_13);
-		}// room temp reached //
+			delayMS(5000);
+//			delayMS(300000);
+		}
+		// end of cool down period //
+		// room temp reached //
+		write_GP(PA, FAN_PIN, 0); // turn the fan off
+		uart_send(UART_PORT, "Cool down process is over\n");
 		
-		for(i=0; i < offDurition; i++)
-			HAL_Delay(1000);
-		// done running for off durition //
-		
-		HAL_GPIO_WritePin(GPIOA, RELAY_SSR_PORT, GPIO_PIN_RESET); // turn heater on
-		
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
-  }
-  /* USER CODE END 3 */
-}
-
-/**
-  * @brief System Clock Configuration
-  * @retval None
-  */
-void SystemClock_Config(void)
-{
-  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
-  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
-  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
-
-  /** Initializes the RCC Oscillators according to the specified parameters
-  * in the RCC_OscInitTypeDef structure.
-  */
-  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_NONE;
-  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Initializes the CPU, AHB and APB buses clocks
-  */
-  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
-                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
-  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_HSE;
-  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
-  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_0) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
-  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV2;
-  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
-
-/**
-  * @brief ADC1 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_ADC1_Init(void)
-{
-
-  /* USER CODE BEGIN ADC1_Init 0 */
-
-  /* USER CODE END ADC1_Init 0 */
-
-  ADC_ChannelConfTypeDef sConfig = {0};
-
-  /* USER CODE BEGIN ADC1_Init 1 */
-
-  /* USER CODE END ADC1_Init 1 */
-
-  /** Common config
-  */
-  hadc1.Instance = ADC1;
-  hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-  hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-  hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-  hadc1.Init.NbrOfConversion = 1;
-  if (HAL_ADC_Init(&hadc1) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-  /** Configure Regular Channel
-  */
-  sConfig.Channel = ADC_CHANNEL_1;
-  sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_1CYCLE_5;
-  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN ADC1_Init 2 */
-
-  /* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
-  * @brief GPIO Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_GPIO_Init(void)
-{
-  GPIO_InitTypeDef GPIO_InitStruct = {0};
-/* USER CODE BEGIN MX_GPIO_Init_1 */
-/* USER CODE END MX_GPIO_Init_1 */
-
-  /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOC_CLK_ENABLE();
-  __HAL_RCC_GPIOD_CLK_ENABLE();
-  __HAL_RCC_GPIOA_CLK_ENABLE();
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOA, GPIO_PIN_11, GPIO_PIN_RESET);
-
-  /*Configure GPIO pin : PC13 */
-  GPIO_InitStruct.Pin = GPIO_PIN_13;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PA10 */
-  GPIO_InitStruct.Pin = GPIO_PIN_10;
-  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : PA11 */
-  GPIO_InitStruct.Pin = GPIO_PIN_11;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-/* USER CODE BEGIN MX_GPIO_Init_2 */
-
-/* USER CODE END MX_GPIO_Init_2 */
-}
-
-/* USER CODE BEGIN 4 */
-unsigned int getTemp(void)
-{
-	unsigned int results[10];		// to keep 10 converted data each time
-	unsigned int average = 0;
-	for(int i=0; i<10; i++)
-	{
-		HAL_Delay(100);		// get ADC value each 300 ms
-		HAL_ADC_Start(&hadc1);
-		results[i] = HAL_ADC_GetValue(&hadc1);
-		average += results[i];
+		// beginning of off-time durition //
+		for(i=0; i < offDurition; i++){}
+//			delayMS(60000);
+		// end of off-time durition //
 	}
-	average /= 10; // have the average for digital value
-	return average;
-}
-/* USER CODE END 4 */
-
-/**
-  * @brief  This function is executed in case of error occurrence.
-  * @retval None
-  */
-void Error_Handler(void)
-{
-  /* USER CODE BEGIN Error_Handler_Debug */
-  /* User can add his own implementation to report the HAL error return state */
-  __disable_irq();
-  while (1)
-  {
-  }
-  /* USER CODE END Error_Handler_Debug */
+	
+	
+	
+	return 0;
 }
 
-#ifdef  USE_FULL_ASSERT
-/**
-  * @brief  Reports the name of the source file and the source line number
-  *         where the assert_param error has occurred.
-  * @param  file: pointer to the source file name
-  * @param  line: assert_param error line source number
-  * @retval None
-  */
-void assert_failed(uint8_t *file, uint32_t line)
+void setup(void)
 {
-  /* USER CODE BEGIN 6 */
-  /* User can add his own implementation to report the file name and line number,
-     ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
+	systick_init();
+	gpio_init(PC, 13, OUT50, OUT_GP_PP);
+	write_GP(PC, 13, 1);
+	gpio_init(PA, RELAY_SSR_PIN, OUT10, OUT_GP_PP);
+	write_GP(PA, RELAY_SSR_PIN, 1);
+	gpio_init(PA, FAN_PIN, OUT10, OUT_GP_PP);
+	write_GP(PA, FAN_PIN, 0);
+	gpio_init(PA, ON_BUTTON_PIN, IN, IN_PP);
+	adc_init(adc1, PA, NTC_PIN);
+	adc_init(adc2, PA, LED_PIN);
+	uart_init(UART_PORT, UART_SPEED);
+	delayMS(100);
+	
+	/* uart comfigurations */
+	serialPort.mode = 0; 					/* 0: process /// 1/2/3: brigde to uart1/2/3 */
+	serialPort.signal = 0;				/* message recieved signal */
+	serialPort.strategy = 1; 			/* 1:terminator /// 0:interrupt */
 }
-#endif /* USE_FULL_ASSERT */
+
+unsigned short getTemp(void)
+{
+	unsigned int sumData = 0;
+	unsigned int result;
+	
+	for(int i=0; i<100;){
+		if(adc_check(adc1, PA, NTC_PIN)){
+			i++;
+			sumData += adc_get(adc1, PA, NTC_PIN);
+		}
+		delayMS(10);
+	}
+	result = sumData /100 ;
+	printValue(result);
+	return result;
+}
+
+unsigned short heatLedIsOn(void)
+{
+	unsigned int sumData = 0;
+	unsigned int result;
+	
+	for(int i=0; i<100;){
+		if(adc_check(adc2, PA, LED_PIN)){
+			i++;
+			sumData += adc_get(adc2, PA, LED_PIN);
+		}
+		delayMS(10);
+	}
+	result = sumData /100 ;
+	printValue(result);
+	if(result > HEAT_LED_REFERANCE)
+		return 1;
+	else
+		return 0;
+}
+
+void printValue(unsigned int value)
+{
+	valueStr = int2char(value);
+	uart_send(UART_PORT, valueStr);
+	uart_send(UART_PORT, "\n");
+	free(valueStr);
+}
