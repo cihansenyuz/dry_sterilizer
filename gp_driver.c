@@ -1,9 +1,17 @@
 #include "gp_driver.h"
 
-
+/* 
+* Enables GPIO port and initializes pin configuration
+*
+* @param port desired GPIO port
+* @param pin pin number of the port
+* @param dir input/output direction, see header file
+* @param opt options for the direction, see header file
+* @return none
+*/
 void gpio_init (unsigned short port, unsigned short pin, unsigned dir, unsigned short opt)
 {
-	volatile unsigned long* ClockReg;
+	volatile unsigned long* ClockReg; /* the adress of the enable register of the port */
 	unsigned short tPIN = pin;
 	unsigned short offset = 0x00;
 	
@@ -36,6 +44,13 @@ void gpio_init (unsigned short port, unsigned short pin, unsigned dir, unsigned 
 	
 }
 
+/* 
+* Reads GPIO pin state
+*
+* @param port desired GPIO port
+* @param pin pin number of the port
+* @return 1 or 0 corresponding HIGH or LOW
+*/
 int read_GP (unsigned short port, unsigned short pin)
 {
 	volatile unsigned long * IDR;
@@ -58,7 +73,14 @@ int read_GP (unsigned short port, unsigned short pin)
 	return state;
 }
 
-
+/* 
+* Outputs desired logic state from GPIO pin
+*
+* @param port desired GPIO port
+* @param pin pin number of the port
+* @param state desired logic state
+* @return none
+*/
 void write_GP (unsigned short port, unsigned short pin, unsigned short state)
 {
 	volatile unsigned long * ODR;
@@ -80,6 +102,13 @@ void write_GP (unsigned short port, unsigned short pin, unsigned short state)
 	
 }
 
+/* 
+* Outputs the opposite of current logic state of GPIO pin
+*
+* @param port desired GPIO port
+* @param pin pin number of the port
+* @return none
+*/
 void toggle_GP (unsigned short port, unsigned short pin)
 {
 	if (read_GP(port,pin))

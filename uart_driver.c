@@ -1,12 +1,15 @@
 #include "uart_driver.h"
-#include "systick_delay.h"
 
+/* 
+* Configurates selected uart with interrupt and selected baud rate
+*
+* @param usart selected uart port
+* @param BR selected baud rate
+* @return none
+*/
 void uart_init(unsigned short usart, unsigned long BR)
 {
-	/*
-	USART2 TX:PA2 RX:PA3
-	USART1 TX:PA9 RX:PA10 */
-	
+	/* if using USART1 clock speed is 72MHz, else 36MHz */
 	unsigned long BRR_calc;
 	
 	BRR_calc = USART_BRR(usart,BR);
@@ -34,8 +37,6 @@ void uart_init(unsigned short usart, unsigned long BR)
 	USART1->CR1 |= 0x20;
 		NVIC_EnableIRQ(USART1_IRQn);
 		__enable_irq();
-		
-		
 	}
 	else if (usart == 2)
 	{
@@ -67,6 +68,13 @@ void uart_init(unsigned short usart, unsigned long BR)
 	}*/
 }
 
+/* 
+* Calculates BBR value to meet selected baud rate
+*
+* @param usart selected uart port
+* @param BR selected baud rate
+* @return calculated BBR value
+*/
 unsigned long USART_BRR(unsigned short usart, unsigned long BR)
 {
 	unsigned long div = 36000000;
@@ -99,6 +107,12 @@ unsigned long USART_BRR(unsigned short usart, unsigned long BR)
 	return final;
 }
 
+/* 
+* Reads one byte from the selected uart port
+*
+* @param usart selected uart port
+* @return recieved char 
+*/
 char uart_RX(unsigned short uart)
 {
 	char c;
@@ -124,6 +138,13 @@ char uart_RX(unsigned short uart)
 return c;
 }
 
+/* 
+* Writes a char to the selected uart port
+*
+* @param usart selected uart port
+* @param c char to send
+* @return none
+*/
 void uart_TX(unsigned short uart, char c)
 {
 	if(uart == 1)
@@ -146,6 +167,13 @@ void uart_TX(unsigned short uart, char c)
 	}
 }
 
+/* 
+* Writes one byte to the selected uart port
+*
+* @param usart selected uart port
+* @param hex byte in hexadecimal to be send
+* @return none
+*/
 void uart_TX_hex(unsigned short uart, unsigned short hex)
 {
 	if(uart == 1)
@@ -168,46 +196,63 @@ void uart_TX_hex(unsigned short uart, unsigned short hex)
 	}
 }
 
-/*
-1- define my uart
-2- is it bridge or process or both
-if process : String to fullfill, counter, signal
+/* 
+* Provides uart message management according to mode, strategy, terminator, timeConstant sets once there is uart interrupt
+*
+* @param usart selected uart port
+* @param uartMan uart configuration sets
+* @return none
 */
-
 void uart_ISR(unsigned short uart, struct uartManager* uartMan)
 {
-	if(uartMan->mode == 0)
-	{
-		uartMan->message[uartMan->count] = uart_RX(uart);
+	/* Check which mode is set */
+	if(uartMan->mode == 0) 
+	{	
+		/* --- mode: process --- */
+		uartMan->message[uartMan->count] = uart_RX(uart); /* get message byte by byte */
+		/* Check which strategy is set */
 		if(uartMan->strategy)
 		{	
-			/* --- terminator strategy --- */
+			/* --- strategy: terminator --- */
+			/* Check if it is the end of the message */
 			if(uartMan->message[uartMan->count] == uartMan->terminator)
 			{
-				uartMan->message[uartMan->count] = '\0';
+				uartMan->message[uartMan->count] = '\0'; /* overwrite the terminator char with null */
 				uartMan->count = 0;
 				uartMan->signal = 1;
 			}
 			else
 			{
+
 				uartMan->count++;
-			}/* -------------------------- */
+			}
+			/* ----------------------------- */
 		}
 		else
 		{
-			/* timer strategy (interrupt) */
+			/* --- strategy: interrupt --- */
 			uartMan->count++;
 			uartMan->timeCounter = uartMan->timeConstant;
-			
 			systick_interrup_start();
+			/* ---------------------------- */
 		}
+		/* ------------------------ */
 	}
-	else
-	{
-		uart_TX(uartMan->mode,uart_RX(uart));
+	else 
+	{	
+		/* --- mode: bridge --- */
+		uart_TX(uartMan->mode,uart_RX(uart)); /* just mirror the message */
+		/* -------------------- */
 	}
 }
 
+/* 
+* Writes all bytes given as string to the selected uart port
+*
+* @param usart selected uart port
+* @param str string to be send
+* @return none
+*/
 void uart_send(unsigned short uart, char str[])
 {
 	int i = 0;
@@ -219,6 +264,15 @@ void uart_send(unsigned short uart, char str[])
 	}
 }
 
+/* 
+* Writes all bytes given as string to the selected uart port and gives some interval for a reply
+*
+* @param usart selected uart port
+* @param str string to be send
+* @param uartMan uart configuration sets
+* @return none
+* @note if time interval is not enough, change timeOut variable manually
+*/
 void uart_message(unsigned short uart, char str[], struct uartManager* uartMan)
 {
 	unsigned long timeOut = 120000000;
@@ -230,48 +284,26 @@ void uart_message(unsigned short uart, char str[], struct uartManager* uartMan)
 	uartMan->signal = 0;
 }
 
-void systick_interrupt(struct uartManager* uart1Man)
+/* 
+* Creates delay according to uart manager time constant
+*
+* @param uartMan uart configuration sets
+* @return none
+*/
+void systick_interrupt(struct uartManager* uartMan)
 {
-	if(uart1Man->count != 0)
+	if(uartMan->count != 0)
 	{
-		if(uart1Man->timeCounter == 0)
+		if(uartMan->timeCounter == 0)
 		{
-			uart1Man->count = 0;
-			uart1Man->signal = 1;
-			uart1Man->timeConstant = 0;
+			uartMan->count = 0;
+			uartMan->signal = 1;
+			uartMan->timeConstant = 0;
 			systick_init(); /* to stop interrupt */
 		}
 		else
 		{
-			uart1Man->timeCounter--;
-		}
-	}/*
-	else if(uart2Man->count != 0)
-	{
-		if(uart2Man->timeCounter == 0)
-		{
-			uart2Man->count = 0;
-			uart2Man->signal = 1;
-			uart2Man->timeConstant = 0;
-			systick_init(); // to stop interrupt
-		}
-		else
-		{
-			uart2Man->timeCounter--;
+			uartMan->timeCounter--;
 		}
 	}
-	else if(uart3Man->count != 0)
-	{
-		if(uart3Man->timeCounter == 0)
-		{
-			uart3Man->count = 0;
-			uart3Man->signal = 1;
-			uart3Man->timeConstant = 0;
-			systick_init(); // to stop interrupt
-		}
-		else
-		{
-			uart3Man->timeCounter--;
-		}
-	}*/
 }

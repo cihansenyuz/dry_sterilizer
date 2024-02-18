@@ -1,29 +1,5 @@
-#include "adc_driver.h"
-#include "uart_driver.h"
-#include "help_func.h"
-#include "stdlib.h"
+#include "main.h"
 
-#define OFF_DURITION 1	// mins
-#define ON_DURITION 1	// mins
-#define ROOM_TEMP_REFERANCE 35 //40 23=40derece
-#define HEAT_LED_REFERANCE 450 //250
-
-#define NTC_PIN	1
-#define LED_PIN	6
-#define RELAY_SSR_PIN 11
-#define ON_BUTTON_PIN 8
-#define FAN_PIN 4
-
-/* UART Configurations 
-	USART2 TX:PA2 RX:PA3
-	USART1 TX:PA9 RX:PA10 */
-#define UART_PORT 2
-#define UART_SPEED 115200
-
-void setup(void);
-unsigned short getTemp(void);
-unsigned short heatLedIsOn(void);
-void printValue(unsigned int);
 struct uartManager serialPort;
 //unsigned int heatUpCounter = 0;
 char* valueStr;
@@ -37,14 +13,11 @@ int main(void)
 	setup();
 	
 	uart_send(UART_PORT, "STM32 is ready. Push the button\n");
-	while(read_GP(PA, ON_BUTTON_PIN))		// wait while ON_BUTTON is not pushed
-	{}
-	
-//		while(1)
-//		{
-//			write_GP(PA, RELAY_SSR_PIN, 1);	// turn the heater on
-//			write_GP(PA, RELAY_SSR_PIN, 0);	// turn the heater off
-//		}
+	while(read_GP(PA, ON_BUTTON_PIN))		
+	{
+		// wait until ON_BUTTON is pushed
+	}
+
 	while(1)
 	{
 		// begining of heat up period //
@@ -96,6 +69,12 @@ int main(void)
 	return 0;
 }
 
+/* 
+* Configurates and initiliazes GPIOs, ADC and UART.
+*
+* @param none
+* @return none
+*/
 void setup(void)
 {
 	systick_init();
@@ -112,11 +91,17 @@ void setup(void)
 	delayMS(100);
 	
 	/* uart comfigurations */
-	serialPort.mode = 0; 					/* 0: process /// 1/2/3: brigde to uart1/2/3 */
+	serialPort.mode = 0; 				/* 0: process /// 1/2/3: brigde to uart1/2/3 */
 	serialPort.signal = 0;				/* message recieved signal */
 	serialPort.strategy = 1; 			/* 1:terminator /// 0:interrupt */
 }
 
+/* 
+* Reads ADC value 100 times in a second of NTC connected pin and calculates the average of reads.
+*
+* @param none
+* @return average value of ADC
+*/
 unsigned short getTemp(void)
 {
 	unsigned int sumData = 0;
@@ -134,6 +119,12 @@ unsigned short getTemp(void)
 	return result;
 }
 
+/* 
+* Reads ADC value 100 times in a second of LED connected pin and calculates the average of reads. Determines whether LED is on or off.
+*
+* @param none
+* @return 1: heat LED is on, 0: off
+*/
 unsigned short heatLedIsOn(void)
 {
 	unsigned int sumData = 0;
@@ -154,6 +145,12 @@ unsigned short heatLedIsOn(void)
 		return 0;
 }
 
+/* 
+* Prints given integer value to serial port
+*
+* @param value integer number to be printed
+* @return none
+*/
 void printValue(unsigned int value)
 {
 	valueStr = int2char(value);

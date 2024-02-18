@@ -1,17 +1,10 @@
 #include "help_func.h"
-#include "stdlib.h"
 
-/*
-
-1- get the lenght of a string
-2- find a string on a string
-3- find an exact string match
-4- concatenate 2 strings
-5- convert int to string
-6- convert string to unsigned int
-
+/* gets the lenght of a string
+*
+* @param string that will be measured
+* @return lenght of the string
 */
-
 int str_len(char str[])
 {
 	int len = 0;
@@ -21,6 +14,11 @@ int str_len(char str[])
 	
 }
 
+/* finds a string in another string
+*
+* @param string being looked for, string needs to be checked
+* @return 1 if exists, 0 if does not
+*/
 int str_find(char str1[],char str2[])
 {
 	int result = 0;
@@ -48,8 +46,12 @@ int str_find(char str1[],char str2[])
 	return result;
 }
 
-
-
+/* checks if two string are exactly the same
+*
+* @param str1 first string
+* @param str2 second string
+* @return 1 if they are exact, 0 if are not
+*/
 int str_exact(char str1[],char str2[])
 {
 	int result = 0;
@@ -60,7 +62,12 @@ int str_exact(char str1[],char str2[])
 	return result;
 }
 
-
+/* concatenate two strings into one string
+*
+* @param str1 first string
+* @param str2 second string to be added to first one
+* @return new string that is created
+*/
 void str_merge(char str1[], char str2[])
 {
 	int i = 0;
@@ -74,6 +81,13 @@ void str_merge(char str1[], char str2[])
 	}
 }
 
+/* converts to string numbers from integer
+*
+* @param num number to be converted
+* @return char* to new string that is created
+* @note ATTENTION! this function allocates memory for returned char*
+* Do not forget to deallocate it after you use.
+*/
 char* int2char(unsigned int num)
 {
 	char* str;
@@ -99,6 +113,12 @@ char* int2char(unsigned int num)
 	return str;
 }
 
+/* converts to integer from string numbers
+*
+* @param str string number to be converted
+* @return new integer number that is created
+*
+*/
 int char2int(char str[])
 {
 	int result = 0;
@@ -113,6 +133,11 @@ int char2int(char str[])
 	return result;
 }
 
+/* clears the content of a char array
+*
+* @param str string to be cleared
+* @return none
+*/
 void str_empty(char str[])
 {
 	int i = 0;
